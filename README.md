@@ -14,7 +14,7 @@
 
 ```bash
 # 1. Клонируй репозиторий
-git clone <repo-url>
+git clone https://github.com/gavrolga/NSAPI
 cd notification-service
 
 # 2. Скопируй .env
@@ -35,10 +35,11 @@ docker compose exec app php artisan db:seed
 
 ## Сервисы после запуска
 
-| Сервис | URL |
-|---|---|
-| API | http://localhost:8080/api/v1 |
-| Swagger | http://localhost:8080/api/documentation |
+| Сервис      | URL |
+|-------------|---|
+| API         | http://localhost:8080/api/v1 |
+| Swagger  UI | http://localhost:8080/api/documentation |
+| OpenAPI spec | [docs/openapi.json](docs/openapi.json) |
 | RabbitMQ UI | http://localhost:15672 (ns_rabbit / secret) |
 
 ## API
