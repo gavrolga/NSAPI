@@ -1,0 +1,66 @@
+{
+    "vhosts": [
+        {
+            "name": "/"
+        }
+    ],
+    "exchanges": [
+        {
+            "name": "notifications",
+            "vhost": "/",
+            "type": "direct",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "queues": [
+        {
+            "name": "high",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-queue-type": "classic",
+                "x-message-ttl": 86400000,
+                "x-dead-letter-exchange": "notifications.dead"
+            }
+        },
+        {
+            "name": "low",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-queue-type": "classic",
+                "x-message-ttl": 86400000,
+                "x-dead-letter-exchange": "notifications.dead"
+            }
+        },
+        {
+            "name": "failed",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {}
+        }
+    ],
+    "bindings": [
+        {
+            "source": "notifications",
+            "vhost": "/",
+            "destination": "high",
+            "destination_type": "queue",
+            "routing_key": "high",
+            "arguments": {}
+        },
+        {
+            "source": "notifications",
+            "vhost": "/",
+            "destination": "low",
+            "destination_type": "queue",
+            "routing_key": "low",
+            "arguments": {}
+        }
+    ]
+}

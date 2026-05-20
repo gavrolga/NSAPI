@@ -1,0 +1,150 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: docker/app/Dockerfile
+        container_name: ns_app
+        restart: unless-stopped
+        working_dir: /var/www
+        volumes:
+            - .:/var/www
+            - ./docker/app/php.ini:/usr/local/etc/php/conf.d/local.ini
+        environment:
+            - APP_ENV=${APP_ENV:-local}
+            - APP_KEY=${APP_KEY}
+        depends_on:
+            postgres:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - ns_network
+        user: "1000:1000"
+    nginx:
+        image: nginx:1.25-alpine
+        container_name: ns_nginx
+        restart: unless-stopped
+        ports:
+            - "${NGINX_PORT:-8080}:80"
+        volumes:
+            - .:/var/www
+            - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+        depends_on:
+            app:
+                condition: service_started
+        networks:
+            - ns_network
+    worker:
+        build:
+            context: .
+            dockerfile: docker/app/Dockerfile
+        container_name: ns_worker
+        restart: unless-stopped
+        working_dir: /var/www
+        user: "1000:1000"
+        command: php artisan queue:work redis --queue=high,low --tries=3 --timeout=60 --sleep=3
+        volumes:
+            - .:/var/www
+            - ./docker/app/php.ini:/usr/local/etc/php/conf.d/local.ini
+        depends_on:
+            postgres:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - ns_network
+#    horizon:
+#        build:
+#            context: .
+#            dockerfile: docker/app/Dockerfile
+#        container_name: ns_horizon
+#        restart: unless-stopped
+#        working_dir: /var/www
+#        command: php artisan horizon
+#        volumes:
+#            - .:/var/www
+#            - ./docker/app/php.ini:/usr/local/etc/php/conf.d/local.ini
+#        depends_on:
+#            postgres:
+#                condition: service_healthy
+#            rabbitmq:
+#                condition: service_healthy
+#            redis:
+#                condition: service_healthy
+#        networks:
+#            - ns_network
+    postgres:
+        image: postgres:16-alpine
+        container_name: ns_postgres
+        restart: unless-stopped
+        ports:
+            - "${DB_PORT:-5432}:5432"
+        environment:
+            POSTGRES_DB: ${DB_DATABASE:-notifications}
+            POSTGRES_USER: ${DB_USERNAME:-ns_user}
+            POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-ns_user} -d ${DB_DATABASE:-notifications}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        networks:
+            - ns_network
+    rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        container_name: ns_rabbitmq
+        restart: unless-stopped
+        ports:
+            - "${RABBITMQ_PORT:-5672}:5672"
+            - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"   # Web UI
+        environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-ns_rabbit}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-secret}
+            RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+        volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+            - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+            - ./docker/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
+        healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "ping"]
+            interval: 10s
+            timeout: 10s
+            retries: 10
+        networks:
+            - ns_network
+    redis:
+        image: redis:7.2-alpine
+        container_name: ns_redis
+        restart: unless-stopped
+        ports:
+            - "${REDIS_PORT:-6379}:6379"
+        command: redis-server /usr/local/etc/redis/redis.conf
+        volumes:
+            - redis_data:/data
+            - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        networks:
+            - ns_network
+
+volumes:
+    postgres_data:
+        driver: local
+    rabbitmq_data:
+        driver: local
+    redis_data:
+        driver: local
+
+networks:
+    ns_network:
+        driver: bridge
