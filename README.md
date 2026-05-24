@@ -13,23 +13,23 @@
 ## Запуск
 
 ```bash
-# 1. Клонируй репозиторий
+# 1. Клонировать репозиторий
 git clone https://github.com/gavrolga/NSAPI
 cd notification-service
 
-# 2. Скопируй .env
+# 2. Скопировать .env
 cp .env.example .env
 
-# 3. Подними все контейнеры
+# 3. Поднять все контейнеры
 docker compose up --build -d
 
-# 4. Сгенерируй ключ
+# 4. Сгенерировать ключ
 docker compose exec app php artisan key:generate
 
-# 5. Запусти миграции
+# 5. Запустить миграции
 docker compose exec app php artisan migrate
 
-# 6. Заполни тестовыми данными
+# 6. Заполнить тестовыми данными
 docker compose exec app php artisan db:seed
 ```
 
