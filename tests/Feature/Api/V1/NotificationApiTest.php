@@ -10,6 +10,8 @@ use App\Services\Gateways\NotificationGatewayInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
+use App\Jobs\SendNotificationJob;
+use Illuminate\Support\Facades\Queue;
 
 class NotificationApiTest extends TestCase
 {
@@ -25,6 +27,9 @@ class NotificationApiTest extends TestCase
     // Тест 1: POST создаёт уведомление со статусом queued
     public function test_bulk_notification_is_queued(): void
     {
+        // Отключаем выполнение джобов чтобы проверить именно статус queued
+        Queue::fake();
+
         $subscribers = Subscriber::factory()->count(2)->create();
 
         $response = $this->postJson('/api/v1/notifications', [
@@ -49,11 +54,13 @@ class NotificationApiTest extends TestCase
 
         $this->assertDatabaseHas('notifications', [
             'idempotency_key' => 'test-key-001',
-            'status'          => 'queued',
             'channel'         => 'email',
         ]);
 
         $this->assertDatabaseCount('notification_recipients', 2);
+
+        // Проверяем что джоб был поставлен в очередь
+        Queue::assertPushed(SendNotificationJob::class, 2);
     }
 
     // Тест 2: Дедупликация — повторный запрос не создаёт дубль

@@ -106,4 +106,72 @@ class SendNotificationJobTest extends TestCase
         $recipient->refresh();
         $this->assertEquals(1, $recipient->attempts);
     }
+
+    // Тест 4: Job успешно доставляет SMS
+    /**
+     * @throws ReflectionException
+     * @throws Throwable
+     */
+    public function test_job_sends_sms_and_updates_status(): void
+    {
+        $this->app->bind(
+            NotificationGatewayInterface::class . ':sms',
+            fn() => new class implements NotificationGatewayInterface {
+                public function send(string $to, string $message): GatewayResult {
+                    return GatewayResult::ok();
+                }
+            }
+        );
+
+        $subscriber   = Subscriber::factory()->create(['phone' => '+79001112233']);
+        $notification = Notification::factory()->create(['channel' => 'sms']);
+        $recipient    = NotificationRecipient::factory()->create([
+            'notification_id' => $notification->id,
+            'subscriber_id'   => $subscriber->id,
+            'status'          => 'queued',
+        ]);
+
+        (new SendNotificationJob($recipient->id))->handle();
+
+        $this->assertDatabaseHas('notification_recipients', [
+            'id'     => $recipient->id,
+            'status' => 'delivered',
+        ]);
+    }
+
+    // Тест 5: Job делает retry при ошибке gateway
+    /**
+     * @throws ReflectionException
+     * @throws Throwable
+     */
+    public function test_job_retries_on_gateway_failure(): void
+    {
+        $this->app->bind(
+            NotificationGatewayInterface::class . ':email',
+            fn() => new class implements NotificationGatewayInterface {
+                public function send(string $to, string $message): GatewayResult {
+                    return GatewayResult::fail('Provider temporarily unavailable.');
+                }
+            }
+        );
+
+        $subscriber   = Subscriber::factory()->create(['email' => 'retry@example.com']);
+        $notification = Notification::factory()->create(['channel' => 'email']);
+        $recipient    = NotificationRecipient::factory()->create([
+            'notification_id' => $notification->id,
+            'subscriber_id'   => $subscriber->id,
+            'status'          => 'queued',
+        ]);
+
+        (new SendNotificationJob($recipient->id))->handle();
+
+        $this->assertDatabaseHas('notification_recipients', [
+            'id'         => $recipient->id,
+            'status'     => 'queued',
+            'last_error' => 'Provider temporarily unavailable.',
+        ]);
+
+        $recipient->refresh();
+        $this->assertEquals(1, $recipient->attempts);
+    }
 }
