@@ -26,6 +26,9 @@ class SendNotificationJob implements ShouldQueue
         public readonly int $recipientId
     ) {}
 
+    /**
+     * @throws Throwable
+     */
     public function handle(): void
     {
         $recipient = NotificationRecipient::with(['notification', 'subscriber'])
@@ -58,6 +61,28 @@ class SendNotificationJob implements ShouldQueue
                 $this->handleFailure($recipient, $result->error);
             }
 
+            if ($result->success) {
+                $recipient->update([
+                    'status'  => 'delivered',
+                    'sent_at' => now(),
+                ]);
+
+                // Обновляем статус уведомления если все получатели доставлены
+                $notification = $recipient->notification;
+                $allDelivered = $notification->recipients()
+                    ->whereNotIn('status', ['delivered', 'rejected'])
+                    ->doesntExist();
+
+                if ($allDelivered) {
+                    $hasRejected = $notification->recipients()
+                        ->where('status', 'rejected')
+                        ->exists();
+
+                    $notification->update([
+                        'status' => $hasRejected ? 'sent' : 'delivered',
+                    ]);
+                }
+            }
         } catch (Throwable $e) {
             $this->handleFailure($recipient, $e->getMessage());
             throw $e; // перебрасываем чтобы Laravel сделал retry
