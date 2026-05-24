@@ -16,19 +16,13 @@ class SendNotificationJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    // Максимум попыток
     public int $tries = 3;
-
-    // Пауза между попытками в секундах
     public array $backoff = [10, 60, 300];
 
     public function __construct(
         public readonly int $recipientId
     ) {}
 
-    /**
-     * @throws Throwable
-     */
     public function handle(): void
     {
         $recipient = NotificationRecipient::with(['notification', 'subscriber'])
@@ -37,10 +31,8 @@ class SendNotificationJob implements ShouldQueue
         $notification = $recipient->notification;
         $subscriber   = $recipient->subscriber;
 
-        // Определяем нужный шлюз через DI-контейнер
         $gateway = app(NotificationGatewayInterface::class . ':' . $notification->channel);
 
-        // Обновляем счётчик попыток
         $recipient->increment('attempts');
 
         try {
@@ -51,24 +43,12 @@ class SendNotificationJob implements ShouldQueue
             $result = $gateway->send($to, $notification->message);
 
             if ($result->success) {
-                // Успешно отправлено
-                $recipient->update([
-                    'status'  => 'delivered',
-                    'sent_at' => now(),
-                ]);
-            } else {
-                // Шлюз вернул ошибку — пробуем снова
-                $this->handleFailure($recipient, $result->error);
-            }
-
-            if ($result->success) {
                 $recipient->update([
                     'status'  => 'delivered',
                     'sent_at' => now(),
                 ]);
 
                 // Обновляем статус уведомления если все получатели доставлены
-                $notification = $recipient->notification;
                 $allDelivered = $notification->recipients()
                     ->whereNotIn('status', ['delivered', 'rejected'])
                     ->doesntExist();
@@ -82,14 +62,15 @@ class SendNotificationJob implements ShouldQueue
                         'status' => $hasRejected ? 'sent' : 'delivered',
                     ]);
                 }
+            } else {
+                $this->handleFailure($recipient, $result->error);
             }
         } catch (Throwable $e) {
             $this->handleFailure($recipient, $e->getMessage());
-            throw $e; // перебрасываем чтобы Laravel сделал retry
+            throw $e;
         }
     }
 
-    // Вызывается когда все попытки исчерпаны
     public function failed(Throwable $e): void
     {
         Log::error('SendNotificationJob permanently failed', [
@@ -107,7 +88,7 @@ class SendNotificationJob implements ShouldQueue
     private function handleFailure(NotificationRecipient $recipient, string $error): void
     {
         $recipient->update([
-            'status'     => 'queued', // вернём в queued, retry сделает новую попытку
+            'status'     => 'queued',
             'last_error' => $error,
         ]);
     }
