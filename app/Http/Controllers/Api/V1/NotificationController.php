@@ -22,9 +22,9 @@ class NotificationController extends Controller
             content: new OA\JsonContent(
                 required: ['channel', 'message', 'idempotency_key', 'recipient_ids'],
                 properties: [
-                    new OA\Property(property: 'channel', type: 'string', enum: ['email', 'sms'], example: 'email'),
+                    new OA\Property(property: 'channel', type: 'string', example: 'email', enum: ['email', 'sms']),
                     new OA\Property(property: 'message', type: 'string', example: 'Ваш код: 1234'),
-                    new OA\Property(property: 'priority', type: 'string', enum: ['high', 'low'], example: 'high'),
+                    new OA\Property(property: 'priority', type: 'string', example: 'high', enum: ['high', 'low']),
                     new OA\Property(property: 'idempotency_key', type: 'string', example: 'unique-key-001'),
                     new OA\Property(property: 'recipient_ids', type: 'array', items: new OA\Items(type: 'integer'), example: [1, 2, 3]),
                 ]
@@ -58,6 +58,21 @@ class NotificationController extends Controller
         $cached = Redis::get($cacheKey);
         if ($cached) {
             return response()->json(json_decode($cached, true), 200);
+        }
+
+        $existing = Notification::where('idempotency_key', $idempotencyKey)->first();
+        if ($existing) {
+            $response = [
+                'notification_id'  => $existing->id,
+                'channel'          => $existing->channel,
+                'priority'         => $existing->priority,
+                'status'           => $existing->status,
+                'recipients_count' => $existing->recipients()->count(),
+                'message'          => 'Notification already exists.',
+            ];
+            // Восстанавливаем в Redis
+            Redis::setex($cacheKey, config('app.idempotency_ttl', 86400), json_encode($response));
+            return response()->json($response, 200);
         }
 
         $notification = Notification::create([

@@ -17,6 +17,7 @@ class Notification extends Model
         'message',
         'priority',
         'status',
+        'id',
     ];
 
     protected $casts = [

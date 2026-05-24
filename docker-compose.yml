@@ -57,26 +57,25 @@ services:
                 condition: service_healthy
         networks:
             - ns_network
-#    horizon:
-#        build:
-#            context: .
-#            dockerfile: docker/app/Dockerfile
-#        container_name: ns_horizon
-#        restart: unless-stopped
-#        working_dir: /var/www
-#        command: php artisan horizon
-#        volumes:
-#            - .:/var/www
-#            - ./docker/app/php.ini:/usr/local/etc/php/conf.d/local.ini
-#        depends_on:
-#            postgres:
-#                condition: service_healthy
-#            rabbitmq:
-#                condition: service_healthy
-#            redis:
-#                condition: service_healthy
-#        networks:
-#            - ns_network
+    horizon:
+        build:
+            context: .
+            dockerfile: docker/app/Dockerfile
+        container_name: ns_horizon
+        restart: unless-stopped
+        working_dir: /var/www
+        user: "1000:1000"
+        command: php artisan horizon
+        volumes:
+            - .:/var/www
+            - ./docker/app/php.ini:/usr/local/etc/php/conf.d/local.ini
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - ns_network
     postgres:
         image: postgres:16-alpine
         container_name: ns_postgres
